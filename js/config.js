@@ -25,11 +25,6 @@ const API_SITES = {
         name: '非凡影视',
         detail: 'http://ffzy5.tv',
     },
-    gying: {
-        api: 'https://www.gying.net',
-        name: '观影',
-        detail: 'https://www.gying.net',
-    },
     
 };
 
