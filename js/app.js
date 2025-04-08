@@ -7,6 +7,8 @@ let currentEpisodeIndex = 0;
 let currentEpisodes = [];
 // 添加当前视频的标题
 let currentVideoTitle = '';
+// 新增全局变量用于倒序状态
+let episodesReversed = false;
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', function() {
@@ -282,21 +284,20 @@ async function showDetails(id, vod_name) {
             
             // 保存当前视频的所有集数
             currentEpisodes = safeEpisodes;
-            
-            if (safeEpisodes.length === 0) {
-                modalContent.innerHTML = '<p class="text-center text-gray-400 py-8">没有找到可用的播放链接</p>';
-            } else {
-                modalContent.innerHTML = `
-                    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-                        ${safeEpisodes.map((episode, index) => `
-                            <button id="episode-${index}" onclick="playVideo('${episode}','${vod_name.replace(/"/g, '&quot;')}', ${index})" 
-                                    class="px-4 py-2 bg-[#222] hover:bg-[#333] border border-[#333] hover:border-white rounded-lg transition-colors text-center episode-btn">
-                                第${index + 1}集
-                            </button>
-                        `).join('')}
-                    </div>
-                `;
-            }
+            episodesReversed = false; // 默认正序
+            modalContent.innerHTML = `
+                <div class="flex justify-end mb-2">
+                    <button onclick="toggleEpisodeOrder()" class="px-4 py-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white font-semibold rounded-full shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clip-rule="evenodd" />
+                        </svg>
+                        <span>倒序排列</span>
+                    </button>
+                </div>
+                <div id="episodesGrid" class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                    ${renderEpisodes(vod_name)}
+                </div>
+            `;
         } else {
             modalContent.innerHTML = '<p class="text-center text-gray-400 py-8">没有找到可播放的视频</p>';
         }
@@ -314,134 +315,24 @@ async function showDetails(id, vod_name) {
     }
 }
 
-// 更新播放视频函数，添加集数索引参数
+// 更新播放视频函数，修改为在新标签页中打开播放页面
 function playVideo(url, vod_name, episodeIndex = 0) {
     if (!url) {
         showToast('无效的视频链接', 'error');
         return;
     }
     
-    showLoading();
-    const modalContent = document.getElementById('modalContent');
-    const modalTitle = document.getElementById('modalTitle');
+    // 保存当前状态到localStorage，让播放页面可以获取
+    localStorage.setItem('currentVideoTitle', currentVideoTitle);
+    localStorage.setItem('currentEpisodeIndex', episodeIndex);
+    localStorage.setItem('currentEpisodes', JSON.stringify(currentEpisodes));
+    localStorage.setItem('episodesReversed', episodesReversed);
     
-    // 更新当前播放集数索引
-    currentEpisodeIndex = episodeIndex;
+    // 构建播放页面URL，传递必要参数
+    const playerUrl = `player.html?url=${encodeURIComponent(url)}&title=${encodeURIComponent(vod_name)}&index=${episodeIndex}`;
     
-    try {
-        // 安全处理URL和标题
-        const safeUrl = url;
-        const safeTitle = vod_name ? vod_name.replace(/</g, '&lt;').replace(/>/g, '&gt;') : '未知视频';
-        
-        // 更新标题显示
-        modalTitle.textContent = safeTitle + " - 第" + (currentEpisodeIndex + 1) + "集";
-        
-        // 更新当前播放的集数按钮样式
-        const episodeButtons = document.querySelectorAll('.episode-btn');
-        episodeButtons.forEach((btn, index) => {
-            if (index === currentEpisodeIndex) {
-                btn.classList.add('playing');
-                btn.classList.add('bg-blue-700');
-                btn.classList.remove('bg-[#222]');
-                btn.classList.add('border-blue-500');
-                btn.classList.remove('border-[#333]');
-            } else {
-                btn.classList.remove('playing');
-                btn.classList.remove('bg-blue-700');
-                btn.classList.add('bg-[#222]');
-                btn.classList.remove('border-blue-500');
-                btn.classList.add('border-[#333]');
-            }
-        });
-        
-        // 创建导航控制按钮
-        const hasPrevious = currentEpisodeIndex > 0;
-        const hasNext = currentEpisodeIndex < currentEpisodes.length - 1;
-        
-        const navigationControls = `
-            <div class="flex justify-between items-center my-4">
-                <button onclick="playPreviousEpisode()" 
-                        class="px-4 py-2 ${hasPrevious ? 'bg-[#222] hover:bg-[#333]' : 'bg-gray-700 cursor-not-allowed'} 
-                               border border-[#333] rounded-lg transition-colors"
-                        ${!hasPrevious ? 'disabled' : ''}>
-                    <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
-                    </svg>
-                    上一集
-                </button>
-                <span class="text-gray-400">第 ${currentEpisodeIndex + 1}/${currentEpisodes.length} 集</span>
-                <button onclick="playNextEpisode()" 
-                        class="px-4 py-2 ${hasNext ? 'bg-[#222] hover:bg-[#333]' : 'bg-gray-700 cursor-not-allowed'} 
-                               border border-[#333] rounded-lg transition-colors"
-                        ${!hasNext ? 'disabled' : ''}>
-                    下一集
-                    <svg class="w-5 h-5 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
-                    </svg>
-                </button>
-            </div>
-        `;
-        
-        // 先移除现有的视频播放器（如果存在）
-        const existingPlayer = modalContent.querySelector('.video-player');
-        if (existingPlayer) {
-            existingPlayer.remove();
-        }
-        
-        // 获取当前HTML内容并查找剧集列表
-        const episodesList = modalContent.querySelector('.grid');
-        
-        if (episodesList) {
-            // 保留剧集列表
-            const episodesHtml = episodesList.outerHTML;
-            
-            modalContent.innerHTML = `
-                <div class="space-y-4">
-                    <div class="video-player">
-                        <iframe 
-                            id="videoIframe"
-                            src="${HOPLAYER_URL}?url=${safeUrl}&autoplay=true"
-                            width="100%" 
-                            height="600" 
-                            frameborder="0" 
-                            scrolling="no"
-                            allow="autoplay; encrypted-media; fullscreen"
-                            onload="hideLoading()"
-                            onerror="handlePlayerError()">
-                        </iframe>
-                    </div>
-                    ${navigationControls}
-                    <div class="episodes-list mt-4">
-                        ${episodesHtml}
-                    </div>
-                </div>
-            `;
-        } else {
-            // 没有找到剧集列表，重新创建完整内容
-            modalContent.innerHTML = `
-                <div class="space-y-4">
-                    <div class="video-player">
-                        <iframe 
-                            id="videoIframe"
-                            src="${HOPLAYER_URL}?url=${safeUrl}&autoplay=true"
-                            width="100%" 
-                            height="600" 
-                            frameborder="0" 
-                            scrolling="no"
-                            allow="autoplay; encrypted-media; fullscreen"
-                            onload="hideLoading()"
-                            onerror="handlePlayerError()">
-                        </iframe>
-                    </div>
-                    ${navigationControls}
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('播放器加载错误:', error);
-        hideLoading();
-        showToast('视频播放加载失败，请检查链接或稍后重试', 'error');
-    }
+    // 在新标签页中打开播放页面
+    window.open(playerUrl, '_blank');
 }
 
 // 播放上一集
@@ -466,4 +357,39 @@ function playNextEpisode() {
 function handlePlayerError() {
     hideLoading();
     showToast('视频播放加载失败，请尝试其他视频源', 'error');
+}
+
+// 新增辅助函数用于渲染剧集按钮（使用当前的排序状态）
+function renderEpisodes(vodName) {
+    const episodes = episodesReversed ? [...currentEpisodes].reverse() : currentEpisodes;
+    return episodes.map((episode, index) => {
+        // 根据倒序状态计算真实的剧集索引
+        const realIndex = episodesReversed ? currentEpisodes.length - 1 - index : index;
+        return `
+            <button id="episode-${realIndex}" onclick="playVideo('${episode}','${vodName.replace(/"/g, '&quot;')}', ${realIndex})" 
+                    class="px-4 py-2 bg-[#222] hover:bg-[#333] border border-[#333] rounded-lg transition-colors text-center episode-btn">
+                第${realIndex + 1}集
+            </button>
+        `;
+    }).join('');
+}
+
+// 新增切换排序状态的函数
+function toggleEpisodeOrder() {
+    episodesReversed = !episodesReversed;
+    // 重新渲染剧集区域，使用 currentVideoTitle 作为视频标题
+    const episodesGrid = document.getElementById('episodesGrid');
+    if (episodesGrid) {
+        episodesGrid.innerHTML = renderEpisodes(currentVideoTitle);
+    }
+    
+    // 更新按钮文本和箭头方向
+    const toggleBtn = document.querySelector('button[onclick="toggleEpisodeOrder()"]');
+    if (toggleBtn) {
+        toggleBtn.querySelector('span').textContent = episodesReversed ? '正序排列' : '倒序排列';
+        const arrowIcon = toggleBtn.querySelector('svg');
+        if (arrowIcon) {
+            arrowIcon.style.transform = episodesReversed ? 'rotate(180deg)' : 'rotate(0deg)';
+        }
+    }
 }
